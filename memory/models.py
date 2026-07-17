@@ -5,6 +5,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ============================================================
+# MEMORY CANDIDATE
+# ============================================================
+
 MemoryCandidateType = Literal[
     "none",
     "profile",
@@ -76,6 +80,17 @@ class MemoryCandidate(BaseModel):
     )
 
 
+# ============================================================
+# MEMORY RELATIONSHIP / CONFLICT CLASSIFICATION
+# ============================================================
+
+MemoryConflictType = Literal[
+    "duplicate",
+    "new",
+    "refinement",
+    "contradiction",
+]
+
 MemoryRelationshipType = Literal[
     "duplicate",
     "new",
@@ -83,14 +98,11 @@ MemoryRelationshipType = Literal[
     "contradiction",
 ]
 
+
 class MemoryRelationshipAssessment(BaseModel):
     """
     LLM assessment of the relationship between a proposed
     memory and one existing active memory.
-
-    Duplicate detection is handled deterministically before
-    this model is called, so the LLM only chooses between:
-    new, refinement and contradiction.
     """
 
     model_config = ConfigDict(
@@ -101,7 +113,8 @@ class MemoryRelationshipAssessment(BaseModel):
     relationship_type: MemoryRelationshipType = Field(
         description=(
             "How the proposed memory relates to the existing "
-            "memory: new, refinement, or contradiction."
+            "memory: duplicate, new, refinement, or "
+            "contradiction."
         )
     )
 
@@ -119,5 +132,81 @@ class MemoryRelationshipAssessment(BaseModel):
         description=(
             "A concise explanation grounded only in the two "
             "memory statements."
+        ),
+    )
+
+
+# ============================================================
+# MEMORY CONSOLIDATION
+# ============================================================
+
+MemoryConsolidationType = Literal[
+    "none",
+    "profile",
+    "learning_state",
+    "episodic",
+    "procedural",
+]
+
+
+class MemoryConsolidationCandidate(BaseModel):
+    """
+    Proposed result of consolidating several related memories.
+
+    This is only a proposal. No memory has been saved,
+    archived, or modified yet.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    should_consolidate: bool = Field(
+        description=(
+            "Whether the selected memories can safely be "
+            "combined into one durable memory."
+        )
+    )
+
+    memory_type: MemoryConsolidationType = Field(
+        description=(
+            "The type of the consolidated memory. Use 'none' "
+            "when consolidation should not occur."
+        )
+    )
+
+    content: str = Field(
+        max_length=500,
+        description=(
+            "A concise consolidated learner memory. Use an "
+            "empty string when consolidation is rejected."
+        ),
+    )
+
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Confidence that the consolidated statement is "
+            "fully supported by the selected memories."
+        ),
+    )
+
+    importance: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Expected usefulness of the consolidated memory "
+            "for future study assistance."
+        ),
+    )
+
+    reason: str = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "Why the memories can or cannot be safely "
+            "consolidated."
         ),
     )

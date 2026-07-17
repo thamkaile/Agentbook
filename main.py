@@ -9,7 +9,19 @@ from memory.conflict_detector import (
     detect_memory_conflict,
 )
 from memory.models import MemoryCandidate
-
+from memory.consolidator import (
+    propose_memory_consolidation,
+)
+from memory.service import (
+    add_memory,
+    apply_memory_consolidation,
+    archive_memory,
+    delete_memory,
+    get_all_memories,
+    replace_memory_with_candidate,
+    search_memories,
+    update_memory,
+)
 from rag.database import (
     delete_document_record,
     initialize_database,
@@ -531,8 +543,142 @@ def add_memory_interface() -> None:
     except Exception as error:
         print(f"\nCould not save memory: {error}")
 
+def consolidate_memories_interface() -> None:
+    """
+    Select active memories, generate a consolidation proposal,
+    and apply it only after explicit confirmation.
+    """
+    print("\nCONSOLIDATE LEARNER MEMORIES")
 
+    memories = get_all_memories(
+        include_archived=False
+    )
 
+    if len(memories) < 2:
+        print(
+            "At least two active memories are required."
+        )
+        return
+
+    print(
+        "\nOnly active memories of the same type "
+        "can be consolidated."
+    )
+
+    for memory in memories:
+        print("\n" + "-" * 60)
+        print(f"ID: {memory.id}")
+        print(f"Type: {memory.memory_type}")
+        print(f"Confidence: {memory.confidence:.2f}")
+        print(f"Importance: {memory.importance:.2f}")
+        print(f"Content: {memory.content}")
+
+    raw_ids = input(
+        "\nEnter memory IDs separated by commas "
+        "or type /back: "
+    ).strip()
+
+    if raw_ids.lower() == "/back":
+        print("Consolidation cancelled.")
+        return
+
+    try:
+        memory_ids = [
+            int(part.strip())
+            for part in raw_ids.split(",")
+            if part.strip()
+        ]
+
+    except ValueError:
+        print(
+            "Every memory ID must be a number."
+        )
+        return
+
+    try:
+        print(
+            "\nGenerating consolidation proposal..."
+        )
+
+        proposal = propose_memory_consolidation(
+            memory_ids
+        )
+
+    except Exception as error:
+        print(
+            f"\nCould not generate consolidation "
+            f"proposal: {error}"
+        )
+        return
+
+    candidate = proposal.candidate
+
+    print("\n" + "=" * 60)
+    print("MEMORY CONSOLIDATION REVIEW")
+    print("=" * 60)
+
+    print("\nSelected source memories:")
+
+    for memory in proposal.source_memories:
+        print("\n" + "-" * 60)
+        print(f"ID: {memory.id}")
+        print(f"Type: {memory.memory_type}")
+        print(f"Content: {memory.content}")
+
+    if not candidate.should_consolidate:
+        print("\nConsolidation rejected.")
+        print(f"Reason: {candidate.reason}")
+        print(
+            "\nNo memories were changed."
+        )
+        return
+
+    print("\nProposed consolidated memory:")
+    print(f"Type: {candidate.memory_type}")
+    print(f"Content: {candidate.content}")
+    print(f"Confidence: {candidate.confidence:.2f}")
+    print(f"Importance: {candidate.importance:.2f}")
+    print(f"Reason: {candidate.reason}")
+
+    confirmation = input(
+        "\nType CONSOLIDATE to archive the source "
+        "memories and save this result: "
+    ).strip()
+
+    if confirmation != "CONSOLIDATE":
+        print(
+            "Consolidation cancelled. "
+            "No memories were changed."
+        )
+        return
+
+    try:
+        result = apply_memory_consolidation(
+            proposal
+        )
+
+    except Exception as error:
+        print(
+            f"\nConsolidation failed: {error}"
+        )
+        return
+
+    print("\nMemory consolidation completed.")
+    print(
+        "Archived source IDs: "
+        + ", ".join(
+            str(memory.id)
+            for memory in result.source_memories
+        )
+    )
+    print(
+        "New consolidated memory ID: "
+        f"{result.consolidated_memory.id}"
+    )
+    print(
+        "Content: "
+        f"{result.consolidated_memory.content}"
+    )
 
 def print_header() -> None:
     print("\n" + "=" * 60)
@@ -552,7 +698,8 @@ def print_menu() -> None:
     print("8. Update learner memory")
     print("9. Archive learner memory")
     print("10. Delete learner memory")
-    print("11. Quit")
+    print("11. Consolidate learner memories")
+    print("12. Quit")
 
 
 def add_file_interface() -> None:
@@ -789,9 +936,13 @@ def main() -> None:
         elif choice == "10":
             delete_memory_interface()
         elif choice == "11":
+            consolidate_memories_interface()
+        elif choice == "12":
             quit_program()
         else:
-            print("Invalid selection. Enter a number from 1 to 11.")
+            print(
+                "Invalid selection. Enter a number from 1 to 12."
+            )
     
 
 
