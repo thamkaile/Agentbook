@@ -5,8 +5,15 @@ langchain-text-splitters
 langchain-chroma
 langchain-huggingface
 langchain-openrouter
+langchain-groq
+langchain-openai
 chromadb
 sentence-transformers
 pypdf
+python-pptx
 python-dotenv
 pydantic
+fastapi
+uvicorn[standard]
+python-multipart
+httpx

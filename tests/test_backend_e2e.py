@@ -8,22 +8,22 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
-import study.database as study_database
-import study.integrity as study_integrity
+import backend.study.database as study_database
+import backend.study.integrity as study_integrity
 
-from study.planner import (
+from backend.study.planner import (
     build_adaptive_study_plan,
 )
-from study.progress import (
+from backend.study.progress import (
     build_progress_report,
 )
-from study.quiz_reporting import (
+from backend.study.quiz_reporting import (
     build_quiz_performance_report,
 )
-from study.recommendations import (
+from backend.study.recommendations import (
     build_review_queue,
 )
-from study.reporting import (
+from backend.study.reporting import (
     build_session_report,
 )
 

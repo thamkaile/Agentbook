@@ -1,7 +1,65 @@
-.venv/
-__pycache__/
-*.pyc
+# Environment and secrets
 .env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
 
-data/app.db
+# Python bytecode, tooling, and packaging
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# JavaScript dependencies and generated frontend artifacts
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+
+# Local Study Companion runtime data
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+data/*.sqlite-*
+data/*.sqlite3
+data/*.sqlite3-*
 data/chroma/
+data/memory_chroma/
+data/exports/
+data/tmp/
+study-companion-export-*.zip
+
+# Logs and temporary files
+*.log
+logs/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+~$*
+
+# Editors, operating systems, and local agent state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+.agents/
+.codex/

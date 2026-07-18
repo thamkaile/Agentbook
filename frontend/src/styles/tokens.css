@@ -1,0 +1,60 @@
+:root {
+  color-scheme: light;
+
+  --color-background: #f5f1e8;
+  --color-surface: #fffcf7;
+  --color-surface-muted: #eee9df;
+  --color-foreground: #1f2933;
+  --color-muted-foreground: #53606a;
+  --color-primary: #2f5d50;
+  --color-primary-strong: #23483e;
+  --color-primary-soft: #e2ece6;
+  --color-on-primary: #ffffff;
+  --color-border: #d8d2c4;
+  --color-border-strong: #aaa396;
+  --color-focus: #783f18;
+
+  --color-info: #28566f;
+  --color-info-soft: #e4f0f5;
+  --color-success: #24543f;
+  --color-success-soft: #e2f0e7;
+  --color-warning: #724c00;
+  --color-warning-soft: #fff1c7;
+  --color-danger: #8d2d35;
+  --color-danger-strong: #722029;
+  --color-danger-soft: #f9e5e6;
+
+  --font-body: "Atkinson Hyperlegible", Arial, sans-serif;
+  --font-heading: "Crimson Pro", Georgia, serif;
+
+  --font-size-xs: 0.8125rem;
+  --font-size-sm: 0.9375rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.375rem;
+  --font-size-2xl: clamp(1.75rem, 2.5vw, 2.25rem);
+  --font-size-3xl: clamp(2.1rem, 4vw, 3rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --space-8: 3rem;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --shadow-sm: 0 1px 2px rgb(31 41 51 / 0.08);
+  --shadow-md: 0 10px 28px rgb(31 41 51 / 0.1);
+  --shadow-dialog: 0 24px 70px rgb(20 28 34 / 0.24);
+
+  --sidebar-width: 17rem;
+  --sidebar-collapsed-width: 5rem;
+  --topbar-height: 4rem;
+  --content-max-width: 90rem;
+  --transition-fast: 160ms ease;
+}
+

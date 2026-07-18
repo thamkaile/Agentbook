@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+from backend.api.errors import ApiError
+from backend.api.schemas import (
+    PresentedQuizQuestionResponse,
+    PresentedQuizResponse,
+    QuizGenerateRequest,
+    QuizQuestionFeedbackResponse,
+    QuizSubmissionResponse,
+    QuizSubmitRequest,
+    SourceLineageResponse,
+)
+from fastapi import APIRouter, Path
+from typing import Annotated
+
+from backend.rag.scope import RetrievalScope
+from backend.study.quiz_api import (
+    PendingQuizNotFoundError,
+    QuizGenerationRejectedError,
+    QuizResponse,
+    generate_quiz_for_api,
+    submit_quiz,
+)
+
+router = APIRouter(prefix="/api/study", tags=["study"])
+
+
+def _scope_from_request(payload: QuizGenerateRequest) -> RetrievalScope | None:
+    scope = payload.scope
+    if scope is not None:
+        return RetrievalScope(
+            notebook_id=scope.notebook_id,
+            document_ids=(
+                tuple(scope.document_ids)
+                if scope.document_ids is not None
+                else None
+            ),
+            topic_id=scope.topic_id,
+        )
+    if payload.notebook_id is not None:
+        return RetrievalScope(notebook_id=payload.notebook_id)
+    if payload.document_ids is not None:
+        return RetrievalScope(document_ids=tuple(payload.document_ids))
+    if payload.topic_id is not None:
+        return RetrievalScope(topic_id=payload.topic_id)
+    return None
+
+
+@router.post(
+    "/actions/quizzes/generate",
+    response_model=PresentedQuizResponse,
+)
+@router.post(
+    "/quiz",
+    response_model=PresentedQuizResponse,
+    include_in_schema=False,
+)
+def generate_quiz(payload: QuizGenerateRequest) -> PresentedQuizResponse:
+    try:
+        quiz = generate_quiz_for_api(
+            payload.topic,
+            payload.question_count,
+            _scope_from_request(payload),
+        )
+    except LookupError as error:
+        raise ApiError(
+            status_code=404,
+            code="scope_not_found",
+            message="Quiz scope was not found.",
+        ) from error
+    except QuizGenerationRejectedError as error:
+        raise ApiError(
+            status_code=422,
+            code="insufficient_evidence",
+            message=str(error),
+        ) from error
+    except ValueError as error:
+        raise ApiError(
+            status_code=422,
+            code="invalid_quiz_request",
+            message=str(error),
+        ) from error
+    except RuntimeError as error:
+        raise ApiError(
+            status_code=502,
+            code="quiz_generation_failed",
+            message="Grounded quiz generation failed.",
+        ) from error
+
+    return PresentedQuizResponse(
+        quiz_id=quiz.quiz_id,
+        requested_topic=quiz.requested_topic,
+        topic=quiz.topic,
+        confidence=quiz.confidence,
+        questions=[
+            PresentedQuizQuestionResponse(
+                question_number=question.question_number,
+                question=question.question,
+                options=list(question.options),
+            )
+            for question in quiz.questions
+        ],
+    )
+
+
+@router.post(
+    "/actions/quizzes/{quiz_id}/submit",
+    response_model=QuizSubmissionResponse,
+)
+@router.post(
+    "/quiz/{quiz_id}/submit",
+    response_model=QuizSubmissionResponse,
+    include_in_schema=False,
+)
+def submit_quiz_route(
+    quiz_id: Annotated[str, Path(min_length=1, max_length=64)],
+    payload: QuizSubmitRequest,
+) -> QuizSubmissionResponse:
+    responses = [
+        QuizResponse(
+            question_number=response.question_number,
+            selected_option=response.selected_option,
+        )
+        for response in payload.responses
+    ]
+    try:
+        result = submit_quiz(quiz_id, responses)
+    except PendingQuizNotFoundError as error:
+        raise ApiError(
+            status_code=404,
+            code="pending_quiz_not_found",
+            message="Pending quiz was not found or has already been submitted.",
+        ) from error
+    except ValueError as error:
+        raise ApiError(
+            status_code=422,
+            code="invalid_quiz_submission",
+            message=str(error),
+        ) from error
+
+    return QuizSubmissionResponse(
+        attempt_id=result.attempt_id,
+        status=result.status,
+        total_questions=result.total_questions,
+        presented_questions=result.presented_questions,
+        answered_questions=result.answered_questions,
+        skipped_questions=result.skipped_questions,
+        correct_answers=result.correct_answers,
+        score_percentage=result.score_percentage,
+        accuracy_percentage=result.accuracy_percentage,
+        feedback=[
+            QuizQuestionFeedbackResponse(
+                question_number=item.question_number,
+                question=item.question,
+                selected_option=item.selected_option,
+                correct_option=item.correct_option,
+                is_correct=item.is_correct,
+                skipped=item.skipped,
+                explanation=item.explanation,
+                sources=[
+                    SourceLineageResponse(
+                        index=source.index,
+                        document_id=source.document_id,
+                        notebook_id=source.notebook_id,
+                        filename=source.filename,
+                        mime_type=source.mime_type,
+                        page_number=source.page_number,
+                        slide_number=source.slide_number,
+                        chunk_index=source.chunk_index,
+                        distance=source.distance,
+                        excerpt=source.excerpt,
+                    )
+                    for source in item.sources
+                ],
+            )
+            for item in result.feedback
+        ],
+    )

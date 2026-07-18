@@ -1,0 +1,401 @@
+# Local Study Companion
+
+Local Study Companion is a private, citation-first study workspace for PDF, PowerPoint, and text notes. It keeps the original terminal application and adds a synchronous FastAPI API plus a responsive React/Vite TypeScript interface.
+
+The application stores metadata, study history, and cached intelligence in SQLite; document and learner-memory vectors live in separate local Chroma stores. Embedding and language-model providers are created only when a workflow needs them, so normal startup, health checks, the dashboard, and cached GET requests do not invoke an LLM.
+
+## What Milestone 7 includes
+
+- Notebook and document management, including a virtual **Unsorted Documents** notebook.
+- Byte-based browser uploads and the existing path-based CLI ingestion flow.
+- Grounded retrieval at global, notebook, document-list, or extracted-topic scope.
+- Cached document, notebook, and topic summaries with source staleness detection.
+- Scoped topic extraction, chat, review, quizzes, adaptive plans, and coaching.
+- Study sessions, outcome tracking, source lineage, progress reports, and integrity checks.
+- Learner-memory CRUD, proposal decisions, and two-step consolidation.
+- Safe local export of SQLite and both Chroma stores with a checksum manifest.
+- Responsive, keyboard-accessible React UI with restrained GSAP route motion.
+
+## Architecture
+
+```text
+React/Vite browser --HTTP /api--> backend/api/
+                                         |
+Root launch shims -----------------------+
+  main.py, api/app.py                     v
+                  backend/rag/  backend/memory/
+                  backend/study/  backend/llm/
+                         |          |
+                         +-- SQLite
+                         +-- document Chroma
+                         +-- memory Chroma
+```
+
+| Area | Responsibility |
+| --- | --- |
+| `main.py` | Backward-compatible terminal launcher; implementation lives in `backend/cli.py`. |
+| `api/` | Backward-compatible shim preserving `uvicorn api.app:app`. |
+| `backend/api/` | App factory, schemas, error mapping, route composition, dashboard, and export delivery. Routes remain thin and call synchronous domain services. |
+| `backend/rag/` | Ingestion, notebook/document metadata, retrieval scopes, chat, citations, cached summaries, and topics. |
+| `backend/memory/` | Learner-memory persistence, vector search, proposals, and consolidation. |
+| `backend/study/` | Sessions, outcomes, quiz scoring, review, plans, coaching, reports, dashboard aggregation, and integrity checks. |
+| `backend/llm/` | Lazy provider construction. |
+| `frontend/` | React Router application, typed API client, request hooks, reusable UI, styles, and Vitest tests. |
+| `tests/` | Python `unittest` unit, integration, API, regression, and end-to-end coverage. |
+| `data/` | Local runtime SQLite and Chroma data. It is intentionally ignored by Git. |
+
+FastAPI startup initializes additive SQLite tables and probes the two Chroma stores. It does not load the embedding model or call the language model. SQLite connections enable foreign keys, a busy timeout, and WAL mode, and are closed at their service boundaries.
+
+## Prerequisites
+
+- Python 3.11 or newer is recommended. The code requires Python 3.10+ syntax.
+- Node.js `^20.19.0` or `>=22.12.0` for the current Vite toolchain.
+- npm.
+- Enough local disk for uploaded content, vector indexes, the embedding model cache, and exports.
+- An API key and model name for an accepted LLM provider when using generative workflows.
+
+The default embedding model is `sentence-transformers/all-MiniLM-L6-v2`. Its first real embedding request can download model files and therefore may require network access. Provider-backed summary, topic, chat, quiz, review, and coaching generation also requires network access unless the configured OpenAI-compatible endpoint is local.
+
+## Setup
+
+From the repository root in PowerShell:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+Set-Location frontend
+npm ci
+Set-Location ..
+```
+
+On macOS or Linux, replace activation with `source .venv/bin/activate` and use `python3` when creating the environment.
+
+Create a root `.env` file. The smallest cloud-provider configuration is:
+
+```dotenv
+LLM_PROVIDER=openrouter
+LLM_API_KEY=replace-me
+LLM_MODEL=replace-me
+```
+
+Supported provider values are:
+
+- `openrouter`
+- `groq`
+- `openai_compatible` — also requires `LLM_BASE_URL`
+
+Optional settings and defaults:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STUDY_DATA_DIR` | `<project>/data` | Directory containing SQLite and both Chroma stores. |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Hugging Face embedding model. |
+| `CHUNK_SIZE` | `1000` | Character-oriented document chunk size. |
+| `CHUNK_OVERLAP` | `200` | Chunk overlap. |
+| `RETRIEVAL_K` | `5` | Maximum document chunks used for ordinary retrieval. |
+| `MEMORY_RETRIEVAL_K` | `5` | Maximum learner memories retrieved. |
+| `MAX_MEMORY_DISTANCE` | `1.15` | Memory retrieval distance ceiling. |
+| `ENABLE_MEMORY_PROPOSALS` | `true` | Enables optional post-chat memory proposals. |
+| `MEMORY_PROPOSAL_MIN_CONFIDENCE` | `0.75` | Proposal confidence threshold. |
+| `MEMORY_PROPOSAL_MIN_IMPORTANCE` | `0.40` | Proposal importance threshold. |
+| `MEMORY_DUPLICATE_MAX_DISTANCE` | `0.40` | Similarity threshold used during duplicate-memory handling. |
+| `MAX_UPLOAD_BYTES` | `52428800` | Upload ceiling in bytes (50 MiB). |
+| `LLM_REASONING_VISIBLE` | `false` | Whether supported providers expose reasoning text to internal callers. Keep disabled for the normal UI. |
+
+Never commit `.env` or provider secrets. A custom `STUDY_DATA_DIR` should point to a private, writable location.
+
+## Run the application
+
+### Terminal app
+
+```powershell
+python main.py
+```
+
+The equivalent direct backend-module command is:
+
+```powershell
+python -m backend.cli
+```
+
+The CLI remains a supported entry point for document ingestion, grounded chat, learner-memory management, study reports, quizzes, review, planning, and coaching. It uses the same SQLite and Chroma data as the API unless `STUDY_DATA_DIR` is changed.
+
+### API
+
+```powershell
+uvicorn backend.api.app:app --reload
+```
+
+The historical `uvicorn api.app:app --reload` command remains supported by a
+thin compatibility shim.
+
+Uvicorn binds to `127.0.0.1:8000` by default. Useful local endpoints:
+
+- Health: `http://127.0.0.1:8000/api/health`
+- OpenAPI UI: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
+
+PowerShell health smoke test:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/health
+```
+
+Health checks initialize/probe local storage but do not load embeddings or call an LLM.
+
+### Frontend
+
+Keep the API running, then open another terminal:
+
+```powershell
+Set-Location frontend
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies `/api` to `http://127.0.0.1:8000`. The development CORS allowlist contains only the loopback Vite origins.
+
+For a production frontend artifact:
+
+```powershell
+Set-Location frontend
+npm run build
+```
+
+The generated `frontend/dist/` directory is intentionally ignored. FastAPI does not publish that directory; serve it with a suitable static server if packaging the app beyond local development.
+
+## API conventions
+
+The API is synchronous by design because the existing domain workflows are synchronous. Pydantic request/response models define public boundaries. All application errors use:
+
+```json
+{
+  "error": {
+    "code": "stable_machine_code",
+    "message": "Safe user-facing message",
+    "details": {}
+  }
+}
+```
+
+`details` is optional. Responses never intentionally expose uploaded file bytes, content hashes, filesystem paths, internal prompts, raw Chroma metadata, secrets, stack traces, or provider reasoning.
+
+Major route groups:
+
+| Route family | Purpose |
+| --- | --- |
+| `/api/health`, `/api/dashboard` | Storage health and deterministic dashboard data. |
+| `/api/notebooks`, `/api/documents` | Notebook CRUD, uploads, assignment, search, counts, metadata edits, and deletion. |
+| `/api/documents/{id}/summary`, `/api/notebooks/{id}/summary` | Cached summary reads and explicit generation. |
+| `/api/topics`, `/api/topics/extract`, `/api/topics/{id}` | Cached topic listing/detail and explicit extraction. |
+| `/api/topics/{id}/summary` | Cached topic-summary reads and explicit generation. |
+| `/api/chat`, `/api/study/sessions`, `/api/study/interactions/{id}/outcome` | Grounded chat, session lifecycle, history, and outcome ratings. |
+| `/api/memories` and proposal/consolidation subroutes | Learner-memory workflows. |
+| `/api/study/actions/*` | Review queue, generated review, quizzes, adaptive plan, and coaching. |
+| `/api/reports/*` | Session, progress, and quiz reports. |
+| `/api/system/integrity`, `/api/system/export` | Storage diagnostics and safe export. |
+
+The generated OpenAPI document is the authoritative field-level route reference.
+
+## Documents and notebooks
+
+### Supported input
+
+| Type | What is extracted |
+| --- | --- |
+| `.pdf` | Readable page text with one-based page lineage. |
+| `.txt` | Readable text, preferring UTF-8 with encoding detection fallback. |
+| `.pptx` | Slide titles, placeholders, text boxes, tables, and recursively nested grouped-shape text, with one-based slide lineage. |
+
+PowerPoint extraction removes repeated text within a slide and ignores empty slides. It does **not** interpret speaker notes, charts, diagrams, images, screenshots, OCR, or visual equations. Legacy `.ppt`, protected presentations, corrupt archives, password-protected PDFs, and scanned/image-only PDFs are unsupported.
+
+Uploads are read as bytes and are limited to 50 MiB by default. The service rejects empty files, unsupported extensions, path traversal, unsafe or reserved filenames, obvious binary `.txt` content, malformed files, and inputs from which no readable text can be extracted. The CLI path wrapper applies the same ingestion pipeline.
+
+Each stored chunk carries public retrieval lineage for document ID, MIME type, chunk index, and a separate page or slide number. Existing rows created before these nullable fields were introduced remain readable.
+
+For a harmless first ingestion smoke test, use `examples/retrieval_distance.txt`.
+
+### Notebook rules
+
+- A document can belong to at most one notebook.
+- A null notebook assignment appears in the virtual **Unsorted Documents** collection; it is not a physical notebook row.
+- Assigning or moving a document changes SQLite membership only. It does not re-embed document chunks.
+- Removing a document from a notebook returns it to Unsorted.
+- A notebook can be deleted only when empty.
+- Uploading duplicate content returns the existing document and does not silently move it to the requested notebook.
+- Document deletion coordinates SQLite and Chroma changes with compensation. SQLite and Chroma cannot participate in one true cross-store transaction, so an interrupted failure can still require the integrity check.
+
+## Retrieval, summaries, and topics
+
+A retrieval request may select exactly one of:
+
+- one notebook;
+- a non-empty list of document IDs;
+- one extracted topic; or
+- no scope, meaning all indexed documents.
+
+The server resolves and validates scope. Chroma filtering happens before top-k context construction. If an explicitly requested scope contains no evidence, the request fails safely; it never falls back to global documents. Notebook moves therefore need no vector rewrite. Topic retrieval is restricted to the exact cited `(document_id, chunk_index)` pairs saved for that topic.
+
+Summary and topic generation are explicit operations:
+
+- `GET` returns only a cached result and its `stale` flag.
+- `POST` performs generation or regeneration.
+- The dashboard and normal GET requests never trigger an LLM call.
+
+Generation uses bounded hierarchical context, validated structured model output, and validated citations. The latest valid result stores source snapshots, generation time, and a fingerprint derived from the participating documents. A source change makes the cached view stale. Failed regeneration preserves the previous valid result.
+
+## Chat, sessions, learner memory, and quizzes
+
+### Chat and study history
+
+Chat validates retrieval scope before work begins. The server serializes active-session creation and enforces one active session with a partial unique SQLite index. A successful turn stores the interaction and source lineage atomically as `unrated`, then may create a learner-memory proposal.
+
+Persisted source lineage can include document ID, notebook ID, filename, MIME type, page number, slide number, chunk index, vector distance, and a bounded excerpt. Outcome ratings can later mark understanding state without rewriting the answer.
+
+### Learner-memory decisions
+
+The API uses server-held UUID registries instead of terminal prompts:
+
+- `accept` saves the proposed memory.
+- `replace` archives the selected existing memory and saves the replacement.
+- `keep_both` saves the proposal separately.
+- `reject` discards the proposal.
+- `cancel` leaves the proposal pending.
+
+Consolidation is also two-step: generate a registry-backed proposal, then accept or reject it. Pending memory proposals and pending consolidation proposals are process memory only and disappear when the API restarts.
+
+### Quiz secrecy and scoring
+
+Quiz generation returns only the question text and answer options. Correct options, explanations, internal source mappings, and trusted generated quiz state remain server-side until submission.
+
+Submission accepts a contiguous prefix starting at question 1:
+
+- a null option means the presented question was skipped;
+- an omitted suffix means those questions were not presented and the attempt is aborted;
+- non-contiguous or out-of-range answers are rejected.
+
+The server derives correctness from its pending registry, calculates results, returns explanations and citations, and persists an attempt ID. Overall score is correct answers divided by all generated questions; answered accuracy is correct answers divided by answered questions. A pending quiz is single-use and disappears after submission or API restart.
+
+## Storage and migrations
+
+Default runtime layout:
+
+```text
+data/
+├── app.db          # documents, notebooks, caches, memory metadata, and study history
+├── chroma/         # document embeddings
+└── memory_chroma/  # learner-memory embeddings
+```
+
+SQLite migrations are additive: tables and indexes are created if absent, and new nullable lineage columns are added without rebuilding existing tables. Foreign keys are enabled on every connection, `busy_timeout` is set, and WAL improves local reader/writer coexistence.
+
+Do not hand-edit SQLite or Chroma files while the CLI or API is running. The data directories, database files, WAL sidecars, logs, frontend build output, dependency folders, and temporary exports are ignored by Git. Ignoring a file does not untrack a copy already committed in repository history.
+
+## Export
+
+Download a local backup from:
+
+```text
+GET /api/system/export
+```
+
+The exporter:
+
+1. creates a consistent SQLite copy with SQLite's backup API;
+2. allowlists expected files from the document and learner-memory Chroma stores;
+3. rejects symlinks and paths outside the expected store roots;
+4. writes a manifest with file sizes and SHA-256 checksums;
+5. streams a ZIP response; and
+6. removes the temporary export workspace after delivery or failure.
+
+The archive excludes secrets, `.env`, logs, virtual environments, source code, frontend dependencies/build artifacts, arbitrary temporary files, and in-memory pending quiz or proposal registries. It contains private study data and is neither encrypted nor authenticated: store and transfer it accordingly. There is no restore UI in this milestone.
+
+## Frontend design and behavior
+
+The light-only interface uses:
+
+- parchment background `#F5F1E8`;
+- warm surface `#FFFCF7`;
+- foreground `#1F2933`;
+- sage primary `#2F5D50`;
+- border `#D8D2C4`;
+- bundled Crimson Pro headings and Atkinson Hyperlegible body text.
+
+The app includes Dashboard, Chat, Notebooks, Notebook detail, Document detail, Topic workspace, Study Actions, Progress, Learner Memory, and System pages. Desktop uses a persistent/collapsible sidebar; smaller layouts use a top bar and accessible drawer.
+
+The frontend has no Redux, Zustand, Tailwind, Material UI, or shadcn dependency. A centralized typed API client provides abortable requests, GET deduplication, and explicit invalidation. Focused hooks and context own shared state. Forms retain input after recoverable failures, and async actions expose loading, success, failure, retry, and duplicate-submission protection.
+
+Native semantic controls and `<dialog>` provide keyboard behavior, focus trapping, and Escape dismissal. Controls target at least 44 px, focus indicators remain visible, semantic outcomes use text plus icons and accessible colors, and layouts account for long content and citations.
+
+Route content uses GSAP `useGSAP` with scoped refs, automatic cleanup, `contextSafe`, and `gsap.matchMedia`. The normal reveal animates `autoAlpha` and 8 px of vertical movement for 220 ms with `power1.out`. Reduced-motion users receive visibility without movement. The app intentionally avoids ScrollTrigger, animated backgrounds, perpetual motion, and input-blocking animation.
+
+## Testing
+
+### Backend
+
+Run compilation and the complete standard-library test suite from the repository root:
+
+```powershell
+python -m compileall backend api main.py tests
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+Backend tests isolate state with temporary SQLite/Chroma directories, fake embeddings, mocked LLMs, fresh pending registries, and cleared caches. Coverage includes migrations, structured API errors, notebooks, assignments, ingestion, scoped retrieval, intelligence caches, chat, sessions, learner-memory decisions, quiz secrecy/scoring, reports, integrity, rollback/compensation, and export exclusions.
+
+After backend changes, manually launch `python main.py`, exercise the affected CLI path, and exit normally. Also start Uvicorn and verify `/api/health`.
+
+### Frontend
+
+```powershell
+Set-Location frontend
+npm test
+npm run build
+```
+
+Vitest, Testing Library, and JSDOM cover routing, API failures, forms, dialogs/focus, loading and empty states, citations, outcome states, and quiz behavior. The build runs TypeScript checking before Vite packaging.
+
+### Browser audit matrix
+
+Test with the API and Vite dev server running:
+
+| Viewport width | Expected navigation/layout |
+| --- | --- |
+| `1440px` | Full desktop layout and persistent sidebar. |
+| `1024px` | Compact desktop/tablet layout without clipping. |
+| `768px` | Tablet top bar/drawer and reflowed content. |
+| `390px` | Single-column mobile layout with no horizontal overflow. |
+
+At every size check the browser console, horizontal overflow, keyboard-only navigation, visible focus, long filenames/content, citations, dialogs, loading/empty/error/retry states, and duplicate-submit prevention. Repeat with `prefers-reduced-motion: reduce`. Confirm that quiz answers and explanations are absent before submission and that simulated API failures preserve recoverable form input.
+
+### Manual end-to-end check
+
+1. Start the API and frontend; verify health and the empty dashboard.
+2. Create a notebook and upload representative PDF, TXT, and PPTX files.
+3. Confirm Unsorted behavior, assignment, moving, search, duplicate handling, counts, and document metadata.
+4. Generate and re-read summaries/topics; change membership or content and confirm stale status.
+5. Chat at notebook, document, and topic scope; inspect citations and rate an outcome.
+6. Decide a memory proposal and complete a two-step consolidation.
+7. Generate a quiz, verify pre-submit secrecy, skip an item, submit, and inspect the persisted report.
+8. Run review, planning, coaching, progress, dashboard, and integrity workflows.
+9. Export the workspace and inspect the manifest, checksums, allowlisted contents, and temporary-file cleanup.
+10. Re-run the terminal smoke path to confirm CLI compatibility.
+
+## Security and limitations
+
+- This is a single-user, loopback-only local MVP with no authentication or authorization. Do not expose Uvicorn directly to a LAN or the public internet.
+- There is no CSRF layer, rate limiter, multi-user isolation, cloud synchronization, worker queue, streaming response, WebSocket, scheduler, notification system, or background generation.
+- Provider requests send selected retrieved text to the configured LLM service. Review that provider's privacy terms before using sensitive notes.
+- Embeddings and provider libraries are lazy-loaded, so the first generative/retrieval action can be slower than startup.
+- API workflows are synchronous and may occupy a request until embedding or generation finishes.
+- SQLite and Chroma deletion/export coordination is compensating, not a distributed transaction.
+- Pending quizzes and learner-memory proposal registries are intentionally ephemeral across API restarts.
+- The export is a backup artifact, not an encrypted archive, and automated restore is out of scope.
+- PPTX visual content and scanned PDFs require OCR or multimodal processing, which is out of scope.
+- The UI is light-only; dark mode is not included.
+- Frontend production hosting and API authentication are deployment responsibilities outside this milestone.
+
+## License
+
+See [LICENSE](LICENSE).
