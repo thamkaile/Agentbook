@@ -73,37 +73,102 @@ Set-Location ..
 
 On macOS or Linux, replace activation with `source .venv/bin/activate` and use `python3` when creating the environment.
 
-Create a root `.env` file. The smallest cloud-provider configuration is:
+Create a file named `.env` in the repository root, next to `requirements.txt` and the `backend/` directory. Do not place it inside `backend/` or `frontend/`.
+
+Choose **one** of the following provider configurations.
+
+### OpenRouter
 
 ```dotenv
 LLM_PROVIDER=openrouter
-LLM_API_KEY=replace-me
-LLM_MODEL=replace-me
+LLM_API_KEY=sk-or-v1-replace-me
+LLM_MODEL=openai/gpt-4.1-mini
+LLM_REASONING_VISIBLE=false
 ```
 
-Supported provider values are:
+`LLM_BASE_URL` is not required for `openrouter`; Agentbook uses the dedicated OpenRouter integration.
 
-- `openrouter`
-- `groq`
-- `openai_compatible` — also requires `LLM_BASE_URL`
+### Groq
 
-Optional settings and defaults:
+```dotenv
+LLM_PROVIDER=groq
+LLM_API_KEY=gsk_replace-me
+LLM_MODEL=replace-me
+LLM_REASONING_VISIBLE=false
+```
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `STUDY_DATA_DIR` | `<project>/data` | Directory containing SQLite and both Chroma stores. |
-| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Hugging Face embedding model. |
-| `CHUNK_SIZE` | `1000` | Character-oriented document chunk size. |
-| `CHUNK_OVERLAP` | `200` | Chunk overlap. |
-| `RETRIEVAL_K` | `5` | Maximum document chunks used for ordinary retrieval. |
-| `MEMORY_RETRIEVAL_K` | `5` | Maximum learner memories retrieved. |
-| `MAX_MEMORY_DISTANCE` | `1.15` | Memory retrieval distance ceiling. |
-| `ENABLE_MEMORY_PROPOSALS` | `true` | Enables optional post-chat memory proposals. |
-| `MEMORY_PROPOSAL_MIN_CONFIDENCE` | `0.75` | Proposal confidence threshold. |
-| `MEMORY_PROPOSAL_MIN_IMPORTANCE` | `0.40` | Proposal importance threshold. |
-| `MEMORY_DUPLICATE_MAX_DISTANCE` | `0.40` | Similarity threshold used during duplicate-memory handling. |
-| `MAX_UPLOAD_BYTES` | `52428800` | Upload ceiling in bytes (50 MiB). |
-| `LLM_REASONING_VISIBLE` | `false` | Whether supported providers expose reasoning text to internal callers. Keep disabled for the normal UI. |
+`LLM_BASE_URL` is not required for `groq`; Agentbook uses the dedicated Groq integration.
+
+### OpenAI-compatible endpoint
+
+Use this option for providers or local servers that expose an OpenAI-compatible API:
+
+```dotenv
+LLM_PROVIDER=openai_compatible
+LLM_API_KEY=replace-me
+LLM_MODEL=replace-me
+LLM_BASE_URL=https://provider.example.com/v1
+LLM_REASONING_VISIBLE=false
+```
+
+For a local OpenAI-compatible server, the base URL may look like:
+
+```dotenv
+LLM_BASE_URL=http://127.0.0.1:1234/v1
+```
+
+The configured model name must be available from the selected provider. Model identifiers differ between providers and can change, so copy the exact model ID from the provider's dashboard or documentation.
+
+### Complete local `.env` example
+
+The following non-secret settings are a practical starting point. Replace only the provider, API key, and model values as needed:
+
+```dotenv
+# LLM provider: openrouter, groq, or openai_compatible
+LLM_PROVIDER=groq
+LLM_API_KEY=replace-me
+LLM_MODEL=replace-me
+LLM_REASONING_VISIBLE=false
+
+# Required only when LLM_PROVIDER=openai_compatible
+# LLM_BASE_URL=https://provider.example.com/v1
+
+# Embeddings and retrieval
+EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+RETRIEVAL_K=5
+
+# Learner memory
+MEMORY_RETRIEVAL_K=5
+MAX_MEMORY_DISTANCE=1.15
+MEMORY_DUPLICATE_MAX_DISTANCE=0.40
+ENABLE_MEMORY_PROPOSALS=true
+MEMORY_PROPOSAL_MIN_CONFIDENCE=0.75
+MEMORY_PROPOSAL_MIN_IMPORTANCE=0.40
+```
+
+Configuration variables and defaults:
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `LLM_PROVIDER` | For generative workflows | None | Provider adapter: `openrouter`, `groq`, or `openai_compatible`. |
+| `LLM_API_KEY` | For hosted providers | None | API key sent to the selected LLM provider. |
+| `LLM_MODEL` | For generative workflows | None | Exact model identifier accepted by the selected provider. |
+| `LLM_BASE_URL` | Only for `openai_compatible` | None | Base URL of an OpenAI-compatible API, normally ending in `/v1`. It is ignored by the dedicated OpenRouter and Groq integrations. |
+| `LLM_REASONING_VISIBLE` | No | `false` | Whether supported providers expose reasoning text to internal callers. Keep disabled for the normal UI. |
+| `STUDY_DATA_DIR` | No | `<project>/data` | Directory containing SQLite and both Chroma stores. |
+| `EMBEDDING_MODEL` | No | `sentence-transformers/all-MiniLM-L6-v2` | Hugging Face embedding model. |
+| `CHUNK_SIZE` | No | `1000` | Character-oriented document chunk size. |
+| `CHUNK_OVERLAP` | No | `200` | Chunk overlap. |
+| `RETRIEVAL_K` | No | `5` | Maximum document chunks used for ordinary retrieval. |
+| `MEMORY_RETRIEVAL_K` | No | `5` | Maximum learner memories retrieved. |
+| `MAX_MEMORY_DISTANCE` | No | `1.15` | Memory retrieval distance ceiling. |
+| `ENABLE_MEMORY_PROPOSALS` | No | `true` | Enables optional post-chat memory proposals. |
+| `MEMORY_PROPOSAL_MIN_CONFIDENCE` | No | `0.75` | Proposal confidence threshold. |
+| `MEMORY_PROPOSAL_MIN_IMPORTANCE` | No | `0.40` | Proposal importance threshold. |
+| `MEMORY_DUPLICATE_MAX_DISTANCE` | No | `0.40` | Similarity threshold used during duplicate-memory handling. |
+| `MAX_UPLOAD_BYTES` | No | `52428800` | Upload ceiling in bytes (50 MiB). |
 
 Never commit `.env` or provider secrets. A custom `STUDY_DATA_DIR` should point to a private, writable location.
 
